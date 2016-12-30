@@ -34,7 +34,7 @@ sub identify_smooth_fano_in_polydb {
 # return list of ids or map assinging each id its possible decompositions
 sub all_free_sums_in_dim { 
 	if ( @_ == 0 ) {
-		print "usage: all_free_sums_in_dim(dimension, options) where allowed options are verbose, splitinfo, given as hash, e.g. verbose=>1";
+		print "usage: all_free_sums_in_dim(dimension, options) where allowed options are verbose, splitinfo, start, end, skip, amount given as hash, e.g. verbose=>1, skip and amount are considered wrt to the second factor, i.e. for dimension 6, start=end=2, amount=10, skip=50 we get all products of a 2D with a 4D polytope where the index of the 4D polytope is between 50 and 59";
 		return;
 	}
 
@@ -45,20 +45,39 @@ sub all_free_sums_in_dim {
 	} else {
 		$list = new Set<String>;
 	}
-
+	
+	my $start = 1;
+	my $end = $d/2;
+	if ( $options{"start"} ) {
+		$start = $options{"start"};
+	}
+	if ( $options{"end"} ) {
+		$end = $options{"end"};
+	}
+	
+	my $cur_options1 = { db=>"LatticePolytopes", collection=>"SmoothReflexive" };
+	if ( $options{"skip"} ) {
+		$$cur_options1{"skip"} = $options{'skip'};
+	}
+	if ( $options{"amount"} ) {
+		$$cur_options1{"limit"} = $options{'amount'};
+	}
+	my $cur_options2 = { db=>"LatticePolytopes", collection=>"SmoothReflexive" };
+	
 	if ( $options{"verbose"} ) {
 		print "checking for splits of a $d-dimensional polytope\n";
 	}
-	foreach my $n (1..$d/2) {
+	foreach my $n ($start..$end) {
 		if ( $options{"verbose"} ) {
 			print "checking for splits into a $n-dimensional and a ", $d-$n, "-dimensional polytope\n";
 		}
-		my $cur1=db_cursor({"DIM"=>$n}, db=>"LatticePolytopes", collection=>"SmoothReflexive");
+		my $cur1=db_cursor({"DIM"=>$d-$n}, $cur_options1 );
 		while ( !$cur1->at_end() ) {
 			my $c1 = $cur1->next();
-			my $cur2=db_cursor({"DIM"=>$d-$n}, db=>"LatticePolytopes", collection=>"SmoothReflexive");
+			my $cur2=db_cursor({"DIM"=>$n}, $cur_options2 );
 			while ( !$cur2->at_end() ) {
 				my $c2 = $cur2->next();
+				next if ( $n == $d-$n && $c2->name lt $c1->name );
 				my $name = identify_smooth_fano_in_polydb(product($c1,$c2));
 				if ( $options{"verbose"} ) {
 					print "split found: $name splits into ", $c1->name, " and ", $c2->name, "\n";
@@ -166,7 +185,7 @@ sub skew_simplex_k_sums_in_dim {
 	}
 
 	my $cur=db_cursor({"DIM"=>$d-$k}, $cur_options);
-	while ($cur->has_next ) {
+	while ( !$cur->at_end() ) {
 		my $p = $cur->next;
 		my $m = new Matrix<Integer>(primitive($p->FACETS));
 		$m |= zero_matrix<Integer>($m->rows,$k);
@@ -277,7 +296,7 @@ sub all_skew_bipyramids_in_dim {
 	my $cur=db_cursor({"DIM"=>$d-1}, $cur_options);
 	my $bottom = dense(unit_vector<Integer>($d+1,0));
 	$bottom->[$d] = -1;
-	while ( $cur->has_next() ) {
+	while ( !$cur->at_end() ) {
 		my $c = $cur->next();
 		my $fac = primitive($c->FACETS);
 		for my $i (0..$c->N_FACETS-1) {
